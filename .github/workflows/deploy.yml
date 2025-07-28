@@ -43,18 +43,15 @@ jobs:
                   envs: IMAGE_NAME
                   script: |
                       set -e
-                      mkdir -p /opt/envs
-                      # Ensure env file exists with your secrets (edit once on server)
-                      # Example content:
-                      #   OPENAI_API_KEY=sk-...
-                      #   MODEL_NAME=gpt-4o-mini
-                      #   ALLOWED_ORIGINS=https://aiclinic.bio,https://www.aiclinic.bio
-                      ls /opt/envs/aiclinic-back.env || echo "Remember to create /opt/envs/aiclinic-back.env"
+
+
+                      docker network create web || true
+                      docker network connect web caddy-api || true
+
 
                       docker rm -f aiclinic-back || true
                       docker pull $IMAGE_NAME
                       docker run -d --name aiclinic-back \
                         --restart always \
-                        -p 8000:8000 \
-                        --env-file /opt/envs/aiclinic-back.env \
+                        --network web \
                         $IMAGE_NAME
