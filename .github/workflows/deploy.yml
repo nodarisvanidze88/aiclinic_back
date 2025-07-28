@@ -42,16 +42,19 @@ jobs:
                   password: ${{ secrets.DO_BACK_PASS }}
                   envs: IMAGE_NAME
                   script: |
-                      set -e
+                      set -euo pipefail
 
+                      ENV_FILE=/opt/envs/aiclinic-back.env
 
+                      # shared network for caddy-api <-> aiclinic-back
                       docker network create web || true
-                      docker network connect web caddy-api || true
+                      # attach caddy if present
+                      docker ps --format '{{.Names}}' | grep -q '^caddy-api$' && docker network connect web caddy-api || true
 
-
-                      docker rm -f aiclinic-back || true
                       docker pull $IMAGE_NAME
+                      docker rm -f aiclinic-back || true
                       docker run -d --name aiclinic-back \
                         --restart always \
                         --network web \
+                        --env-file "$ENV_FILE" \
                         $IMAGE_NAME
