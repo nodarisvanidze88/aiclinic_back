@@ -11,7 +11,10 @@ load_dotenv(dotenv_path=".env")
 app = FastAPI(title="AIClinic Backend", version="0.1.0")
 
 origins_env = os.getenv("ALLOWED_ORIGINS", "")
-origins = [o.strip() for o in origins_env.split(",")]
+if origins_env:
+    origins = [o.strip() for o in origins_env.split(",")]
+else:
+    origins = None
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins or ["*"],  # relax for demo
