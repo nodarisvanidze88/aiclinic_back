@@ -170,7 +170,7 @@ def generate_follow_up_questions(symptom: str, lang: str) -> List[str]:
         },
         "cough": {
             "en": ["Is the cough dry or with phlegm?"],
-            "ka": ["ხველა მშრალია თუ კავებით?"],
+            "ka": ["ხველა მშრალია თუ გაქვთ ნახველი?"],
             "ru": ["Кашель сухой или с мокротой?"]
         },
         "stomach_pain": {
