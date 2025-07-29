@@ -3,8 +3,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from loguru import logger
-from app.schemas import ChatRequest, ChatResponse
-from app.agent import detect_lang, emergency_red_flags, call_llm
+from app.schemas import ChatRequest, ChatResponse, SymptomAssessment, SymptomAssessment
+from app.agent import detect_lang, emergency_red_flags, call_llm, get_disease_guidance, generate_suggested_actions
 
 load_dotenv(dotenv_path=".env")
 
@@ -55,8 +55,69 @@ def chat(req: ChatRequest):
                 "Please call **112** or go to the nearest emergency department **now**.\n"
                 "If you can, bring a list of your medications and allergies."
             ).format(flag)
-        return ChatResponse(reply=reply)
+        return ChatResponse(
+            reply=reply,
+            urgency_level="emergency",
+            suggested_actions=["Call 112", "Go to emergency department", "Bring medication list"]
+        )
 
     model = os.getenv("MODEL_NAME", "gpt-4o")
-    reply = call_llm(user_text, model=model, lang=lang)
-    return ChatResponse(reply=reply)
+    response_data = call_llm(user_text, model=model, lang=lang, conversation_context=req.user_context)
+    
+    return ChatResponse(
+        reply=response_data["reply"],
+        follow_up_questions=response_data.get("follow_up_questions"),
+        suggested_actions=response_data.get("suggested_actions"),
+        urgency_level=response_data.get("urgency_level"),
+        disease_info=response_data.get("disease_info")
+    )
+
+@app.post("/api/symptom-assessment")
+def assess_symptom(assessment: SymptomAssessment):
+    """Enhanced endpoint for structured symptom assessment"""
+    try:
+        lang = detect_lang(assessment.symptom)
+        disease_info = get_disease_guidance(assessment.symptom.lower(), lang)
+        suggested_actions = generate_suggested_actions(assessment.symptom.lower(), "low", lang)
+        
+        # Determine urgency based on severity
+        urgency_level = "low"
+        if assessment.severity >= 8:
+            urgency_level = "high"
+        elif assessment.severity >= 5:
+            urgency_level = "moderate"
+        
+        return {
+            "symptom": assessment.symptom,
+            "severity_level": urgency_level,
+            "disease_info": disease_info,
+            "suggested_actions": suggested_actions,
+            "recommendations": {
+                "seek_immediate_care": assessment.severity >= 8,
+                "monitor_symptoms": True,
+                "follow_up_days": 3 if assessment.severity < 5 else 1
+            }
+        }
+    except Exception as e:
+        logger.exception("Symptom assessment error")
+        raise HTTPException(status_code=500, detail="Failed to assess symptom")
+
+@app.get("/api/disease-guidelines/{condition}")
+def get_disease_guidelines(condition: str, lang: str = "en"):
+    """Get specific disease guidelines"""
+    try:
+        from app.agent import DISEASE_GUIDELINES
+        
+        if condition.lower() in DISEASE_GUIDELINES:
+            guidelines = DISEASE_GUIDELINES[condition.lower()]
+            return {
+                "condition": condition,
+                "guidance": guidelines["guidance"].get(lang, guidelines["guidance"]["en"]),
+                "red_flags": guidelines["red_flags"],
+                "symptoms": guidelines["symptoms"]
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Condition not found")
+    except Exception as e:
+        logger.exception("Guidelines fetch error")
+        raise HTTPException(status_code=500, detail="Failed to fetch guidelines")
